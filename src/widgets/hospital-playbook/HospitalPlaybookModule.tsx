@@ -13,6 +13,9 @@ import ListColumn from "./ListColumn";
 
 const CATEGORY_WIDTH_KEY = "tuntun-dev-study-category-width";
 const TOPIC_WIDTH_KEY = "tuntun-dev-study-topic-width";
+const EMPTY_CATEGORIES: PlaybookCategory[] = [];
+const EMPTY_TOPICS: PlaybookCategory["topics"] = [];
+const EMPTY_DOCUMENTS: PlaybookDocumentSummary[] = [];
 
 function storedWidth(key: string, fallback: number) {
   const value = Number(window.localStorage.getItem(key));
@@ -51,10 +54,10 @@ function HospitalPlaybookModule() {
   const [categoryWidth, setCategoryWidth] = useState(() => storedWidth(CATEGORY_WIDTH_KEY, 280));
   const [topicWidth, setTopicWidth] = useState(() => storedWidth(TOPIC_WIDTH_KEY, 300));
 
-  const categories: PlaybookCategory[] = tree.data ?? [];
+  const categories: PlaybookCategory[] = tree.data ?? EMPTY_CATEGORIES;
   const category = useMemo(() => categories.find((item) => item.id === categoryId) ?? null, [categories, categoryId]);
   const topic = useMemo(() => category?.topics.find((item) => item.id === topicId) ?? null, [category, topicId]);
-  const documents = topic?.documents ?? [];
+  const documents = topic?.documents ?? EMPTY_DOCUMENTS;
   const { rows: documentRows, children } = useMemo(() => flattenDocuments(documents), [documents]);
   const drawerDocument = useQuery({
     queryKey: ["hospital-playbook", "document", drawerDocumentId],
@@ -69,17 +72,27 @@ function HospitalPlaybookModule() {
   useEffect(() => { window.localStorage.setItem(CATEGORY_WIDTH_KEY, String(categoryWidth)); }, [categoryWidth]);
   useEffect(() => { window.localStorage.setItem(TOPIC_WIDTH_KEY, String(topicWidth)); }, [topicWidth]);
   useEffect(() => {
-    if (!categories.length) return setCategoryId(null);
+    if (!categories.length) {
+      setCategoryId((current) => current === null ? current : null);
+      return;
+    }
     if (!categories.some((item) => item.id === categoryId)) setCategoryId(categories[0].id);
   }, [categories, categoryId]);
   useEffect(() => {
-    const topics = category?.topics ?? [];
-    if (!topics.length) return setTopicId(null);
+    const topics = category?.topics ?? EMPTY_TOPICS;
+    if (!topics.length) {
+      setTopicId((current) => current === null ? current : null);
+      return;
+    }
     if (!topics.some((item) => item.id === topicId)) setTopicId(topics[0].id);
   }, [category, topicId]);
   useEffect(() => {
     const ids = new Set(documents.map((item) => item.id));
-    setExpandedDocumentIds((current) => new Set([...current].filter((id) => ids.has(id))));
+    setExpandedDocumentIds((current) => {
+      const next = new Set([...current].filter((id) => ids.has(id)));
+      if (next.size === current.size && [...next].every((id) => current.has(id))) return current;
+      return next;
+    });
   }, [documents]);
 
   const createCategory = useMutation({ mutationFn: (title: string) => playbookApi.createCategory(title), onSuccess: invalidate });
@@ -169,7 +182,7 @@ function HospitalPlaybookModule() {
           <main className="flex h-full min-h-[640px] min-w-[960px] gap-0">
             <div className="min-h-0 shrink-0" style={{ width: categoryWidth }}><ListColumn title="1차 노트 영역" items={categories.map((item) => ({ id: item.id, title: item.title }))} selectedId={categoryId} onSelect={setCategoryId} onCreate={(title) => createCategory.mutate(title)} onRename={(id, title) => renameCategory.mutate({ id, title })} onDelete={(id) => deleteCategory.mutate(id)} onReorder={(ids) => reorderCategories.mutate(ids)} emptyLabel="아직 영역이 없습니다." createPlaceholder="영역 이름" /></div>
             <ColumnResizeHandle onMouseDown={resizeCategory} />
-            <div className="min-h-0 shrink-0" style={{ width: topicWidth }}><ListColumn title="2차 노트 주제" items={(category?.topics ?? []).map((item) => ({ id: item.id, title: item.title, badge: <FileText className="size-4 shrink-0 text-brand-primary" /> }))} selectedId={topicId} onSelect={setTopicId} onCreate={(title) => category && createTopic.mutate({ categoryId: category.id, title })} onRename={(id, title) => renameTopic.mutate({ id, title })} onDelete={(id) => deleteTopic.mutate(id)} onReorder={(ids) => category && reorderTopics.mutate({ categoryId: category.id, ids })} emptyLabel={category ? "아직 주제가 없습니다." : "먼저 영역을 선택하세요."} createPlaceholder="주제 이름" disabled={!category} /></div>
+            <div className="min-h-0 shrink-0" style={{ width: topicWidth }}><ListColumn title="2차 노트 주제" items={(category?.topics ?? EMPTY_TOPICS).map((item) => ({ id: item.id, title: item.title, badge: <FileText className="size-4 shrink-0 text-brand-primary" /> }))} selectedId={topicId} onSelect={setTopicId} onCreate={(title) => category && createTopic.mutate({ categoryId: category.id, title })} onRename={(id, title) => renameTopic.mutate({ id, title })} onDelete={(id) => deleteTopic.mutate(id)} onReorder={(ids) => category && reorderTopics.mutate({ categoryId: category.id, ids })} emptyLabel={category ? "아직 주제가 없습니다." : "먼저 영역을 선택하세요."} createPlaceholder="주제 이름" disabled={!category} /></div>
             <ColumnResizeHandle onMouseDown={resizeTopic} />
             <section className="flex min-h-0 min-w-[420px] flex-1 flex-col rounded-lg border border-surface-border bg-surface-raised shadow-sm">
               <header className="flex shrink-0 items-center justify-between gap-3 border-b border-surface-border-soft px-4 py-3">

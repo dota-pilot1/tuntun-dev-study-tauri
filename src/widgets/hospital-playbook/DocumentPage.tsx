@@ -10,6 +10,10 @@ import { LexicalEditor } from "../../shared/ui/lexical/lexical-editor";
 
 type DocumentRow = { document: PlaybookDocumentSummary; depth: number; indexPath: number[]; visible: boolean };
 
+function sameSet(left: Set<number>, right: Set<number>) {
+  return left.size === right.size && [...left].every((id) => right.has(id));
+}
+
 function rowsFor(documents: PlaybookDocumentSummary[], collapsed: Set<number>) {
   const children = new Map<number, PlaybookDocumentSummary[]>();
   const roots: PlaybookDocumentSummary[] = [];
@@ -121,7 +125,7 @@ export default function DocumentPage({
 
   useEffect(() => {
     const parentIds = new Set(documents.flatMap((item) => item.parentId === null ? [] : [item.parentId]));
-    setCollapsed(parentIds);
+    setCollapsed((current) => sameSet(current, parentIds) ? current : parentIds);
   }, [topicId, documents]);
 
   const toggleCollapsed = (id: number) => setCollapsed((current) => {

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Database, MonitorCog, RefreshCw, Settings2 } from "lucide-react";
+import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Database, Loader2, MonitorCog, RefreshCw, Settings2 } from "lucide-react";
 import PageHeader from "../../shared/ui/PageHeader";
 import { API_BASE, getApiTarget, type ApiTarget } from "../../shared/api/client";
 import { APP_PROFILE } from "../../shared/config/app-modules";
@@ -181,6 +181,18 @@ function DatabaseSyncPanel({ apiTarget }: { apiTarget: ApiTarget }) {
         {localMode ? <ArrowDownToLine className="size-4" /> : <ArrowUpFromLine className="size-4" />}
         {busy ? "동기화 중..." : "동기화 실행"}
       </button>
+
+      {busy && (
+        <div className="fixed inset-0 z-[100] grid place-items-center bg-black/30 p-4" role="status" aria-live="polite" aria-label="DB 동기화 중">
+          <div className="flex w-full max-w-sm items-center gap-3 rounded-lg border border-surface-border bg-surface-raised px-5 py-4 shadow-xl">
+            <Loader2 className="size-5 shrink-0 animate-spin text-brand-primary" />
+            <div>
+              <p className="text-sm font-black text-text-primary">DB 동기화 중...</p>
+              <p className="mt-0.5 text-xs font-semibold text-text-muted">DB 크기에 따라 시간이 걸릴 수 있습니다.</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {confirmOpen && (
         <div className="fixed inset-0 z-[90] grid place-items-center bg-black/35 p-4" role="dialog" aria-modal="true" aria-label="DB 동기화 확인">

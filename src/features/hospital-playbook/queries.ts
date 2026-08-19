@@ -4,13 +4,13 @@ import { playbookApi, type PlaybookCategory } from "./api";
 /** 노트 트리 캐시 키. 셸(배지)과 노트 화면이 같은 응답을 공유한다. */
 export const PLAYBOOK_TREE_KEY = ["hospital-playbook", "tree"];
 
-export function usePlaybookTree() {
-  return useQuery({ queryKey: PLAYBOOK_TREE_KEY, queryFn: playbookApi.tree });
+export function usePlaybookTree(enabled = true) {
+  return useQuery({ queryKey: PLAYBOOK_TREE_KEY, queryFn: playbookApi.tree, enabled });
 }
 
 /** 승인 대기(초안) 문서 수. 직원이 놓치기 쉬운 "승인 안 한 문서"를 레일에 배지로 띄운다. */
-export function useDraftDocumentCount(): number {
-  const tree = usePlaybookTree();
+export function useDraftDocumentCount(enabled = true): number {
+  const tree = usePlaybookTree(enabled);
   return countDrafts(tree.data ?? []);
 }
 

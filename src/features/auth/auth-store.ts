@@ -47,7 +47,10 @@ export const useAuthStore = create<AuthState>((set) => ({
  * (모듈 안에서 "유효하지 않은 토큰입니다." 만 띄우고 멈춰 있던 문제를 막는다.)
  */
 setSessionExpiredHandler(() => {
-  const { user, restoring } = useAuthStore.getState();
+  const { user, restoring, sessionExpired } = useAuthStore.getState();
   // 앱 시작 시 복구 실패는 restore() 가 처리하므로 안내 문구를 띄우지 않는다.
-  useAuthStore.setState({ user: null, sessionExpired: !restoring && user !== null });
+  const nextExpired = !restoring && user !== null;
+  if (user !== null || (!sessionExpired && nextExpired)) {
+    useAuthStore.setState({ user: null, sessionExpired: nextExpired });
+  }
 });

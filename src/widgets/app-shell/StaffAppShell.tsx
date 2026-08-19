@@ -27,8 +27,9 @@ function StaffAppShell({
 }) {
   const user = useAuthStore((s) => s.user);
   // 노트 트리는 노트 화면과 같은 캐시를 쓰므로 배지 때문에 요청이 늘지 않는다.
-  const draftCount = useDraftDocumentCount();
-  const pendingHandoffCount = usePendingHandoffCount();
+  const badgesEnabled = active !== "settings" && active !== "profile";
+  const draftCount = useDraftDocumentCount(badgesEnabled);
+  const pendingHandoffCount = usePendingHandoffCount(badgesEnabled);
   const badgeCounts: Partial<Record<StaffViewId, number>> = {
     playbook: draftCount,
     handoff: pendingHandoffCount,

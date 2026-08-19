@@ -65,12 +65,19 @@ dump_local() {
 
 restore_local() {
   if [[ "$use_local_container" == true ]]; then
+    "$DOCKER_BIN" exec "$LOCAL_DB_CONTAINER" psql -v ON_ERROR_STOP=1 \
+      --username="$LOCAL_DB_USER" --dbname="$LOCAL_DB_NAME" \
+      -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
     "$DOCKER_BIN" exec -i "$LOCAL_DB_CONTAINER" pg_restore \
-      --clean --if-exists --no-owner --no-acl --exit-on-error \
+      --no-owner --no-acl --exit-on-error \
       --username="$LOCAL_DB_USER" --dbname="$LOCAL_DB_NAME" < "$remote_dump"
   else
+    PGPASSWORD="$LOCAL_DB_PASSWORD" psql \
+      --host="$LOCAL_DB_HOST" --port="$LOCAL_DB_PORT" \
+      --username="$LOCAL_DB_USER" --dbname="$LOCAL_DB_NAME" \
+      -v ON_ERROR_STOP=1 -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
     PGPASSWORD="$LOCAL_DB_PASSWORD" pg_restore \
-      --clean --if-exists --no-owner --no-acl --exit-on-error \
+      --no-owner --no-acl --exit-on-error \
       --host="$LOCAL_DB_HOST" --port="$LOCAL_DB_PORT" \
       --username="$LOCAL_DB_USER" --dbname="$LOCAL_DB_NAME" "$remote_dump"
   fi
@@ -92,7 +99,9 @@ else
   dump_local
   echo "Backing up production database..."
   "${remote[@]}" "set -e; mkdir -p '$REMOTE_APP_DIR/db-backups'; docker exec $REMOTE_DB_CONTAINER pg_dump --format=custom --no-owner --no-acl -U $REMOTE_DB_USER -d $REMOTE_DB_NAME > '$REMOTE_APP_DIR/db-backups/tuntun-hospital-book-$stamp.dump'"
+  echo "Resetting production schema..."
+  "${remote[@]}" "docker exec $REMOTE_DB_CONTAINER psql -v ON_ERROR_STOP=1 -U $REMOTE_DB_USER -d $REMOTE_DB_NAME -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'"
   echo "Restoring local data into production database..."
-  cat "$local_dump" | "${remote[@]}" "docker exec -i $REMOTE_DB_CONTAINER pg_restore --clean --if-exists --no-owner --no-acl --exit-on-error -U $REMOTE_DB_USER -d $REMOTE_DB_NAME"
+  cat "$local_dump" | "${remote[@]}" "docker exec -i $REMOTE_DB_CONTAINER pg_restore --no-owner --no-acl --exit-on-error -U $REMOTE_DB_USER -d $REMOTE_DB_NAME"
   echo "DB sync completed: local -> production"
 fi

@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+direction="${1:-}"
+if [[ "$direction" != "pull" && "$direction" != "push" ]]; then
+  echo "direction must be pull or push" >&2
+  exit 2
+fi
+
+config_file="${TUNTUN_DB_SYNC_CONFIG:-$HOME/.config/tuntun-dev-study/db-sync.env}"
+if [[ -f "$config_file" ]]; then
+  # The file is user-owned and must contain only shell-style KEY=value lines.
+  # shellcheck disable=SC1090
+  source "$config_file"
+fi
+
+: "${LOCAL_DB_HOST:=127.0.0.1}"
+: "${LOCAL_DB_PORT:=5436}"
+: "${LOCAL_DB_NAME:=tuntun_hospital_book}"
+: "${LOCAL_DB_USER:=postgres}"
+: "${LOCAL_DB_PASSWORD:=postgres}"
+: "${REMOTE_HOST:=13.209.195.64}"
+: "${REMOTE_USER:=ubuntu}"
+: "${REMOTE_SSH_KEY:=$HOME/towercrane-for-uiux/docs-for-배포/hibot-d-server-key.pem}"
+: "${REMOTE_DB_CONTAINER:=tuntun-hospital-book-postgres}"
+: "${REMOTE_DB_NAME:=tuntun_hospital_book}"
+: "${REMOTE_DB_USER:=postgres}"
+: "${REMOTE_APP_DIR:=/home/ubuntu/tuntun-hospital-book}"
+
+if [[ ! -r "$REMOTE_SSH_KEY" ]]; then
+  echo "SSH key not found: $REMOTE_SSH_KEY" >&2
+  exit 1
+fi
+
+ssh_args=(-i "$REMOTE_SSH_KEY" -o StrictHostKeyChecking=accept-new)
+remote=(ssh "${ssh_args[@]}" "$REMOTE_USER@$REMOTE_HOST")
+stamp="$(date +%Y%m%d-%H%M%S)"
+work_dir="$(mktemp -d -t tuntun-db-sync.XXXXXX)"
+trap 'rm -rf "$work_dir"' EXIT
+
+local_dump="$work_dir/local.dump"
+remote_dump="$work_dir/remote.dump"
+local_backup_dir="${TUNTUN_DB_SYNC_BACKUP_DIR:-$HOME/.local/share/tuntun-dev-study/db-backups}"
+
+dump_local() {
+  PGPASSWORD="$LOCAL_DB_PASSWORD" pg_dump \
+    --format=custom --no-owner --no-acl \
+    --host="$LOCAL_DB_HOST" --port="$LOCAL_DB_PORT" \
+    --username="$LOCAL_DB_USER" --dbname="$LOCAL_DB_NAME" \
+    > "$local_dump"
+}
+
+restore_local() {
+  PGPASSWORD="$LOCAL_DB_PASSWORD" pg_restore \
+    --clean --if-exists --no-owner --no-acl --exit-on-error \
+    --host="$LOCAL_DB_HOST" --port="$LOCAL_DB_PORT" \
+    --username="$LOCAL_DB_USER" --dbname="$LOCAL_DB_NAME" "$remote_dump"
+}
+
+if [[ "$direction" == "pull" ]]; then
+  echo "Backing up local database..."
+  dump_local
+  mkdir -p "$local_backup_dir"
+  cp "$local_dump" "$local_backup_dir/local-$stamp.dump"
+  echo "Local backup saved: $local_backup_dir/local-$stamp.dump"
+  echo "Dumping production database..."
+  "${remote[@]}" "docker exec $REMOTE_DB_CONTAINER pg_dump --format=custom --no-owner --no-acl -U $REMOTE_DB_USER -d $REMOTE_DB_NAME" > "$remote_dump"
+  echo "Restoring production data into local database..."
+  restore_local
+  echo "DB sync completed: production -> local"
+else
+  echo "Dumping local database..."
+  dump_local
+  echo "Backing up production database..."
+  "${remote[@]}" "set -e; mkdir -p '$REMOTE_APP_DIR/db-backups'; docker exec $REMOTE_DB_CONTAINER pg_dump --format=custom --no-owner --no-acl -U $REMOTE_DB_USER -d $REMOTE_DB_NAME > '$REMOTE_APP_DIR/db-backups/tuntun-hospital-book-$stamp.dump'"
+  echo "Restoring local data into production database..."
+  cat "$local_dump" | "${remote[@]}" "docker exec -i $REMOTE_DB_CONTAINER pg_restore --clean --if-exists --no-owner --no-acl --exit-on-error -U $REMOTE_DB_USER -d $REMOTE_DB_NAME"
+  echo "DB sync completed: local -> production"
+fi

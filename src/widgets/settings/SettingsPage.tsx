@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { MonitorCog, RefreshCw, Settings2 } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
+import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Database, MonitorCog, RefreshCw, Settings2 } from "lucide-react";
 import PageHeader from "../../shared/ui/PageHeader";
-import { API_BASE } from "../../shared/api/client";
+import { API_BASE, getApiTarget, type ApiTarget } from "../../shared/api/client";
 import { APP_PROFILE } from "../../shared/config/app-modules";
 
 const APP_VERSION = __APP_VERSION__;
@@ -10,6 +11,7 @@ const TABS = [
   { id: "general", label: "일반 설정", icon: Settings2 },
   { id: "device", label: "장치", icon: MonitorCog },
   { id: "update", label: "업데이트", icon: RefreshCw },
+  { id: "database", label: "DB 동기화", icon: Database },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -17,6 +19,7 @@ type TabId = (typeof TABS)[number]["id"];
 /** 계획서 §6 "설정" 메뉴. 1차 MVP에서 확인 가능한 항목만 노출한다. */
 function SettingsPage() {
   const [activeTab, setActiveTab] = useState<TabId>("general");
+  const apiTarget = getApiTarget();
 
   return (
     <>
@@ -97,9 +100,87 @@ function SettingsPage() {
                 </Note>
               </>
             )}
+
+            {activeTab === "database" && <DatabaseSyncPanel apiTarget={apiTarget} />}
           </div>
         </div>
       </div>
+    </>
+  );
+}
+
+function DatabaseSyncPanel({ apiTarget }: { apiTarget: ApiTarget }) {
+  const localMode = apiTarget === "local";
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const title = localMode ? "운영 DB를 로컬로 가져오기" : "로컬 DB를 운영으로 반영하기";
+  const description = localMode
+    ? "운영 데이터를 로컬 개발 DB로 복사합니다. 로컬 DB의 기존 데이터는 백업 후 교체됩니다."
+    : "로컬 개발 DB를 운영 DB에 반영합니다. 운영 DB를 덮어쓰기 전에 자동 백업을 생성합니다.";
+
+  const runSync = async () => {
+    if (!localMode && window.prompt("운영 DB를 덮어쓰려면 LOCAL TO PRODUCTION을 입력하세요.") !== "LOCAL TO PRODUCTION") {
+      return;
+    }
+    if (localMode && !window.confirm("운영 DB 데이터를 로컬 DB로 복사하시겠습니까?")) return;
+    setBusy(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const output = await invoke<string>("db_sync", { direction: localMode ? "pull" : "push" });
+      setMessage(output || "동기화가 완료되었습니다.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="rounded-md border border-surface-border-soft bg-surface-raised px-4 py-4">
+        <div className="flex items-start gap-3">
+          {localMode ? (
+            <ArrowDownToLine className="mt-0.5 size-5 shrink-0 text-brand-primary" />
+          ) : (
+            <ArrowUpFromLine className="mt-0.5 size-5 shrink-0 text-destructive" />
+          )}
+          <div className="min-w-0">
+            <p className="text-[14px] font-black text-text-primary">{title}</p>
+            <p className="mt-1 text-[12px] font-semibold leading-5 text-text-secondary">{description}</p>
+          </div>
+        </div>
+        <div className="mt-4 flex items-center justify-between rounded-md bg-surface-muted px-3 py-2 text-[12px] font-bold">
+          <span className="text-text-muted">현재 연결 대상</span>
+          <span className="text-text-primary">{localMode ? "로컬" : "배포"}</span>
+        </div>
+      </div>
+
+      <div className="rounded-md border border-amber-300/60 bg-amber-50 px-4 py-3 text-[12px] font-semibold leading-5 text-amber-900">
+        <div className="flex items-start gap-2">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          <p>
+            {localMode
+              ? "운영 DB의 개인정보는 로컬에 복사하기 전에 마스킹 정책을 확인하세요."
+              : "운영 반영은 운영 DB를 덮어씁니다. 백업 성공과 대상 확인 없이는 실행되지 않습니다."}
+          </p>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => void runSync()}
+        className="ui-icon-button-brand h-10 w-full gap-2 text-sm font-black disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {localMode ? <ArrowDownToLine className="size-4" /> : <ArrowUpFromLine className="size-4" />}
+        {busy ? "동기화 중..." : "동기화 실행"}
+      </button>
+
+      {message && <p className="rounded-md border border-emerald-300/60 bg-emerald-50 px-4 py-3 text-[12px] font-semibold leading-5 text-emerald-900">{message}</p>}
+      {error && <p className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-[12px] font-semibold leading-5 text-destructive">{error}</p>}
+      <Note>운영 DB 접속정보는 설치 파일에 포함하지 않습니다. 필요하면 사용자 설정 파일 `~/.config/tuntun-dev-study/db-sync.env`에서 연결값을 덮어쓸 수 있습니다.</Note>
     </>
   );
 }

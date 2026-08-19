@@ -29,7 +29,7 @@ function DocumentPane({
     if (!document.data) return;
     setTitle(document.data.title);
     setContent(document.data.content);
-  }, [document.data?.id]);
+  }, [document.data?.id, document.data?.title, document.data?.content]);
 
   const afterWrite = (saved: Awaited<ReturnType<typeof playbookApi.updateDocument>>) => {
     // 같은 문서에서는 id가 바뀌지 않으므로, 성공 응답을 직접 기준값으로 삼아야

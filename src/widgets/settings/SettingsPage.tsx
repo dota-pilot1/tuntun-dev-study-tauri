@@ -120,12 +120,12 @@ function DatabaseSyncPanel({ apiTarget }: { apiTarget: ApiTarget }) {
     : "로컬 개발 DB를 운영 DB에 반영합니다. 운영 DB를 덮어쓰기 전에 자동 백업을 생성합니다.";
 
   const runSync = async () => {
-    if (!localMode && window.prompt("운영 DB를 덮어쓰려면 LOCAL TO PRODUCTION을 입력하세요.") !== "LOCAL TO PRODUCTION") {
+    if (!localMode && !window.confirm("로컬 DB로 운영 DB를 덮어쓰고 백업을 생성하시겠습니까?")) {
       return;
     }
     if (localMode && !window.confirm("운영 DB 데이터를 로컬 DB로 복사하시겠습니까?")) return;
     setBusy(true);
-    setMessage(null);
+    setMessage("동기화를 시작했습니다. DB 크기에 따라 시간이 걸릴 수 있습니다.");
     setError(null);
     try {
       const output = await invoke<string>("db_sync", { direction: localMode ? "pull" : "push" });

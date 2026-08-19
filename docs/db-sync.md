@@ -15,6 +15,8 @@
 
 macOS/Linux 개발 환경을 기준으로 합니다. Windows 배포 앱에서 사용하려면 위 도구를 PATH에 설치해야 합니다.
 
+로컬 DB가 기본 Docker 컨테이너(`tuntun-hospital-book-postgres`)로 실행 중이면 앱은 컨테이너 안의 PostgreSQL 도구를 사용합니다. 따라서 호스트에 설치된 `pg_dump` 버전이 달라도 동기화할 수 있습니다. 다른 컨테이너를 사용하면 설정 파일에서 `LOCAL_DB_CONTAINER`를 바꾸고, Docker를 사용하지 않으면 빈 값으로 설정해 호스트 도구를 사용하세요.
+
 접속 설정은 앱에 포함하지 않고 다음 파일에서 읽습니다.
 
 `~/.config/tuntun-dev-study/db-sync.env`

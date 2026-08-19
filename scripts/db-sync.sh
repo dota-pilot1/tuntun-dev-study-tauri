@@ -19,6 +19,8 @@ fi
 : "${LOCAL_DB_NAME:=tuntun_hospital_book}"
 : "${LOCAL_DB_USER:=postgres}"
 : "${LOCAL_DB_PASSWORD:=postgres}"
+: "${LOCAL_DB_CONTAINER:=tuntun-hospital-book-postgres}"
+: "${DOCKER_BIN:=docker}"
 : "${REMOTE_HOST:=13.209.195.64}"
 : "${REMOTE_USER:=ubuntu}"
 : "${REMOTE_SSH_KEY:=$HOME/towercrane-for-uiux/docs-for-배포/hibot-d-server-key.pem}"
@@ -41,20 +43,37 @@ trap 'rm -rf "$work_dir"' EXIT
 local_dump="$work_dir/local.dump"
 remote_dump="$work_dir/remote.dump"
 local_backup_dir="${TUNTUN_DB_SYNC_BACKUP_DIR:-$HOME/.local/share/tuntun-dev-study/db-backups}"
+use_local_container=false
+if "$DOCKER_BIN" inspect "$LOCAL_DB_CONTAINER" >/dev/null 2>&1; then
+  use_local_container=true
+fi
 
 dump_local() {
-  PGPASSWORD="$LOCAL_DB_PASSWORD" pg_dump \
-    --format=custom --no-owner --no-acl \
-    --host="$LOCAL_DB_HOST" --port="$LOCAL_DB_PORT" \
-    --username="$LOCAL_DB_USER" --dbname="$LOCAL_DB_NAME" \
-    > "$local_dump"
+  if [[ "$use_local_container" == true ]]; then
+    "$DOCKER_BIN" exec "$LOCAL_DB_CONTAINER" pg_dump \
+      --format=custom --no-owner --no-acl \
+      --username="$LOCAL_DB_USER" --dbname="$LOCAL_DB_NAME" \
+      > "$local_dump"
+  else
+    PGPASSWORD="$LOCAL_DB_PASSWORD" pg_dump \
+      --format=custom --no-owner --no-acl \
+      --host="$LOCAL_DB_HOST" --port="$LOCAL_DB_PORT" \
+      --username="$LOCAL_DB_USER" --dbname="$LOCAL_DB_NAME" \
+      > "$local_dump"
+  fi
 }
 
 restore_local() {
-  PGPASSWORD="$LOCAL_DB_PASSWORD" pg_restore \
-    --clean --if-exists --no-owner --no-acl --exit-on-error \
-    --host="$LOCAL_DB_HOST" --port="$LOCAL_DB_PORT" \
-    --username="$LOCAL_DB_USER" --dbname="$LOCAL_DB_NAME" "$remote_dump"
+  if [[ "$use_local_container" == true ]]; then
+    "$DOCKER_BIN" exec -i "$LOCAL_DB_CONTAINER" pg_restore \
+      --clean --if-exists --no-owner --no-acl --exit-on-error \
+      --username="$LOCAL_DB_USER" --dbname="$LOCAL_DB_NAME" < "$remote_dump"
+  else
+    PGPASSWORD="$LOCAL_DB_PASSWORD" pg_restore \
+      --clean --if-exists --no-owner --no-acl --exit-on-error \
+      --host="$LOCAL_DB_HOST" --port="$LOCAL_DB_PORT" \
+      --username="$LOCAL_DB_USER" --dbname="$LOCAL_DB_NAME" "$remote_dump"
+  fi
 }
 
 if [[ "$direction" == "pull" ]]; then

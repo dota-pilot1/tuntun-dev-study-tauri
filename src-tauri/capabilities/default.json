@@ -18,13 +18,13 @@
       "identifier": "http:default",
       "allow": [
         {
-          "url": "https://study-api.dxline-tallent.com/*"
+          "url": "https://dxline-tallent.com/*"
         },
         {
-          "url": "http://localhost:4302/*"
+          "url": "http://localhost:4301/*"
         },
         {
-          "url": "http://127.0.0.1:4302/*"
+          "url": "http://127.0.0.1:4301/*"
         }
       ]
     }

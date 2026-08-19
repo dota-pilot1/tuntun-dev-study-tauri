@@ -9,9 +9,9 @@
  */
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 
-// 개발 학습 앱은 튼튼 노트와 분리된 Study 서버를 사용한다.
-const LOCAL_API_BASE = "http://localhost:4302";
-const DEPLOY_API_BASE = import.meta.env.VITE_API_BASE ?? "https://study-api.dxline-tallent.com";
+// 당분간 병원 서버와 API 프로세스를 함께 사용한다. 필요하면 나중에 Study 서버로 분리한다.
+const LOCAL_API_BASE = "http://localhost:4301";
+const DEPLOY_API_BASE = import.meta.env.VITE_API_BASE ?? "https://dxline-tallent.com";
 
 const ACCESS_KEY = "tuntun.devstudy.accessToken";
 const REFRESH_KEY = "tuntun.devstudy.refreshToken";

@@ -2,8 +2,8 @@
 
 ## 주소
 
-- API: `https://study-api.dxline-tallent.com`
-- 로컬 API: `http://localhost:4302`
+- API: `https://dxline-tallent.com`
+- 로컬 API: `http://localhost:4301`
 - 개발 웹뷰: `http://localhost:4330`
 
 API 주소를 바꿀 때는 `VITE_API_BASE` 환경변수와

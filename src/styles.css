@@ -1,0 +1,145 @@
+@import "tailwindcss";
+/* 환자용 키오스크 화면은 기존 순수 CSS를 그대로 유지한다. 직원 콘솔만 토큰 체계를 쓴다. */
+@import "./kiosk.css";
+
+/* ──────────────────────────────────────────────────────────────
+   Semantic 테마 토큰 — 참조앱(tc-dx-mybatis)의 체계를 병원 브랜드색으로 미러링.
+   직원 콘솔(로그인 / 튼튼척 노트)이 참조한다.
+   raw 팔레트 색을 직접 쓰지 않고 항상 이 토큰을 거친다.
+   ────────────────────────────────────────────────────────────── */
+@theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+
+  --color-brand-primary: var(--primary);
+  --color-brand-glass: color-mix(in srgb, var(--primary) 10%, transparent);
+  --color-brand-border: color-mix(in srgb, var(--primary) 30%, transparent);
+
+  --color-text-primary: var(--foreground);
+  --color-text-secondary: var(--muted-foreground);
+  --color-text-muted: oklch(0.6 0 0);
+  --color-text-on-brand: var(--primary-foreground);
+
+  --color-surface-muted: var(--muted);
+  --color-surface-raised: var(--card);
+  --color-surface-strong: var(--background);
+  --color-surface-border: var(--border);
+  --color-surface-border-soft: color-mix(in srgb, var(--border) 65%, transparent);
+}
+
+:root {
+  --radius: 0.25rem;
+
+  --background: oklch(0.985 0.002 240);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+
+  /* 병원 브랜드 = 키오스크 화면의 #1976d2 계열 블루 */
+  --primary: oklch(0.55 0.16 250);
+  --primary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.975 0.004 240);
+  --muted-foreground: oklch(0.45 0 0);
+  --destructive: oklch(0.6 0.15 25);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(0.87 0.008 240);
+}
+
+@layer utilities {
+  .ui-panel {
+    @apply rounded-md border border-surface-border bg-surface-raised shadow-[0_1px_3px_rgba(0,0,0,0.05)];
+  }
+
+  .ui-panel-soft {
+    @apply rounded-md border border-surface-border-soft bg-surface-raised;
+  }
+
+  .ui-input {
+    @apply w-full h-10 rounded-md border border-surface-border bg-background px-3 text-[14px] transition-all
+           focus:border-brand-border focus:ring-2 focus:ring-brand-border/20 outline-none disabled:opacity-60;
+  }
+
+  .ui-icon-button {
+    @apply flex items-center justify-center rounded-md border border-surface-border bg-surface-raised
+           text-text-primary transition-all hover:bg-surface-muted active:scale-[0.98];
+  }
+
+  .ui-icon-button-brand {
+    @apply flex items-center justify-center rounded-md border border-brand-primary bg-brand-primary
+           text-text-on-brand transition-all hover:brightness-110 active:scale-[0.98];
+  }
+
+  .ui-icon-button-danger {
+    @apply flex items-center justify-center rounded-md border border-destructive bg-destructive
+           text-destructive-foreground transition-all hover:brightness-110 active:scale-[0.98];
+  }
+}
+
+@layer components {
+  .lexical-editor-readonly code[data-language="mermaid"],
+  .lexical-editor-readonly code[data-language="mmd"] { display: none; }
+  /* 본문은 흰색으로 고정하고, 포커스 시에는 배경색이 변하지 않게 한다. */
+  .lexical-editor-content,
+  .lexical-editor-input,
+  .lexical-editor-input:focus { background-color: #fff !important; }
+  .lexical-editor-input { caret-color: var(--primary); }
+  .lexical-editor-input:focus { box-shadow: none; }
+  .lexical-toolbar { background: color-mix(in srgb, var(--muted) 72%, var(--card)); }
+  .lexical-mermaid-preview { @apply my-3 overflow-auto rounded-md border border-surface-border-soft bg-surface-muted p-4 text-sm text-text-primary; }
+  .lexical-mermaid-preview-flat { margin: 0; border: 0; background: transparent; padding: 0; }
+  .lexical-mermaid-node { @apply my-3 w-full; }
+  .lexical-mermaid-preview svg { max-width: 100%; height: auto; margin: 0 auto; }
+  .lexical-mermaid-preview-error { @apply whitespace-pre-wrap text-destructive; }
+  .editor-list-item-checked, .editor-list-item-unchecked { @apply relative list-none pl-6 text-text-primary; }
+  .editor-list-item-checked::before, .editor-list-item-unchecked::before { content: ""; @apply absolute left-0 top-[0.25em] size-4 rounded border border-surface-border bg-surface-raised; }
+  .lexical-editor-input > code[data-language], .lexical-editor-input > code[data-highlight-language] { position: relative; padding-top: 1rem; }
+  [data-code-copy-button] { position: fixed; top: .55rem; right: .55rem; z-index: 100; display: inline-flex; width: 1.75rem; height: 1.75rem; align-items: center; justify-content: center; border: 1px solid var(--surface-border-soft); border-radius: .375rem; background: var(--surface-raised); color: var(--text-secondary); cursor: pointer; }
+  [data-code-copy-button] svg { display: block; width: .9rem; height: .9rem; fill: none; stroke: currentColor; stroke-width: 2; }
+}
+
+/* Drawer animations */
+@keyframes drawerFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes drawerFadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes drawerSlideIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+@keyframes drawerSlideOut {
+  from { transform: translateX(0); }
+  to { transform: translateX(100%); }
+}
+
+.animate-drawer-fade-in {
+  animation: drawerFadeIn 0.2s ease-out forwards;
+}
+.animate-drawer-fade-out {
+  animation: drawerFadeOut 0.2s ease-in forwards;
+}
+.animate-drawer-slide-in {
+  animation: drawerSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.animate-drawer-slide-out {
+  animation: drawerSlideOut 0.2s ease-in forwards;
+}
+
+/* Sub-document transition */
+@keyframes subDocFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-sub-doc-fade-in {
+  animation: subDocFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}

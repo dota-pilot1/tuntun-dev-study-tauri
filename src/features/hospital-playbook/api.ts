@@ -1,0 +1,155 @@
+import { request } from "../../shared/api/client";
+
+export type DocumentStatus = "DRAFT" | "APPROVED" | "ARCHIVED";
+
+export type PlaybookDocumentSummary = {
+  id: number;
+  topicId: number;
+  parentId: number | null;
+  title: string;
+  status: DocumentStatus;
+  useForChatbot: boolean;
+  orderIdx: number;
+  version: number;
+};
+
+export type PlaybookDocument = PlaybookDocumentSummary & {
+  content: string;
+  createdBy: number | null;
+  approvedBy: number | null;
+  approvedAt: string | null;
+  updatedAt: string;
+};
+
+export type PlaybookDocumentComment = {
+  id: number;
+  documentId: number;
+  parentId: number | null;
+  title: string | null;
+  content: string;
+  createdBy: number | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PlaybookTopic = {
+  id: number;
+  categoryId: number;
+  title: string;
+  orderIdx: number;
+  documents: PlaybookDocumentSummary[];
+};
+
+export type PlaybookCategory = {
+  id: number;
+  title: string;
+  orderIdx: number;
+  topics: PlaybookTopic[];
+};
+
+const BASE = "/api/hospital-playbook";
+
+export const playbookApi = {
+  tree: () => request<PlaybookCategory[]>(BASE, { errorMessage: "튼튼척 노트를 불러오지 못했습니다." }),
+
+  document: (id: number) =>
+    request<PlaybookDocument>(`${BASE}/documents/${id}`, { errorMessage: "문서를 불러오지 못했습니다." }),
+
+  createCategory: (title: string) =>
+    request<PlaybookCategory>(`${BASE}/categories`, {
+      method: "POST",
+      body: { title },
+      errorMessage: "영역을 만들지 못했습니다.",
+    }),
+
+  renameCategory: (id: number, title: string) =>
+    request<PlaybookCategory>(`${BASE}/categories/${id}`, {
+      method: "PATCH",
+      body: { title },
+      errorMessage: "영역 이름을 바꾸지 못했습니다.",
+    }),
+
+  deleteCategory: (id: number) =>
+    request<void>(`${BASE}/categories/${id}`, { method: "DELETE", errorMessage: "영역을 삭제하지 못했습니다." }),
+
+  reorderCategories: (ids: number[]) =>
+    request<void>(`${BASE}/categories/reorder`, {
+      method: "POST",
+      body: { ids },
+      errorMessage: "영역 순서를 저장하지 못했습니다.",
+    }),
+
+  createTopic: (categoryId: number, title: string) =>
+    request<PlaybookTopic>(`${BASE}/categories/${categoryId}/topics`, {
+      method: "POST",
+      body: { title },
+      errorMessage: "주제를 만들지 못했습니다.",
+    }),
+
+  renameTopic: (id: number, title: string) =>
+    request<PlaybookTopic>(`${BASE}/topics/${id}`, {
+      method: "PATCH",
+      body: { title },
+      errorMessage: "주제 이름을 바꾸지 못했습니다.",
+    }),
+
+  deleteTopic: (id: number) =>
+    request<void>(`${BASE}/topics/${id}`, { method: "DELETE", errorMessage: "주제를 삭제하지 못했습니다." }),
+
+  reorderTopics: (categoryId: number, ids: number[]) =>
+    request<void>(`${BASE}/categories/${categoryId}/topics/reorder`, {
+      method: "POST",
+      body: { ids },
+      errorMessage: "주제 순서를 저장하지 못했습니다.",
+    }),
+
+  createDocument: (topicId: number, title: string, parentId: number | null = null) =>
+    request<PlaybookDocument>(`${BASE}/topics/${topicId}/documents`, {
+      method: "POST",
+      body: { title, parentId },
+      errorMessage: "문서를 만들지 못했습니다.",
+    }),
+
+  updateDocument: (id: number, patch: { title?: string; content?: string; useForChatbot?: boolean; parentId?: number | null }) =>
+    request<PlaybookDocument>(`${BASE}/documents/${id}`, {
+      method: "PATCH",
+      body: patch,
+      errorMessage: "문서를 저장하지 못했습니다.",
+    }),
+
+  approveDocument: (id: number) =>
+    request<PlaybookDocument>(`${BASE}/documents/${id}/approve`, {
+      method: "POST",
+      errorMessage: "문서를 승인하지 못했습니다.",
+    }),
+
+  deleteDocument: (id: number) =>
+    request<void>(`${BASE}/documents/${id}`, { method: "DELETE", errorMessage: "문서를 삭제하지 못했습니다." }),
+
+  comments: (documentId: number) =>
+    request<PlaybookDocumentComment[]>(`${BASE}/documents/${documentId}/comments`, { errorMessage: "댓글을 불러오지 못했습니다." }),
+
+  createComment: (documentId: number, body: { title?: string; content: string; parentId?: number | null }) =>
+    request<PlaybookDocumentComment[]>(`${BASE}/documents/${documentId}/comments`, {
+      method: "POST",
+      body,
+      errorMessage: "댓글을 등록하지 못했습니다.",
+    }),
+
+  updateComment: (id: number, body: { title?: string; content: string }) =>
+    request<PlaybookDocumentComment[]>(`${BASE}/comments/${id}`, {
+      method: "PATCH",
+      body,
+      errorMessage: "댓글을 수정하지 못했습니다.",
+    }),
+
+  deleteComment: (id: number) =>
+    request<void>(`${BASE}/comments/${id}`, { method: "DELETE", errorMessage: "댓글을 삭제하지 못했습니다." }),
+
+  reorderDocuments: (topicId: number, ids: number[], parentId: number | null = null) =>
+    request<void>(`${BASE}/topics/${topicId}/documents/reorder`, {
+      method: "POST",
+      body: { ids, parentId },
+      errorMessage: "문서 순서를 저장하지 못했습니다.",
+    }),
+};

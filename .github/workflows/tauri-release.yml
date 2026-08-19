@@ -1,0 +1,97 @@
+name: Tauri Release
+
+# 튼튼 개발 학습 데스크톱 설치 파일을 빌드해 GitHub Release 로 올린다.
+# v 로 시작하는 태그를 푸시하면 실행됨 (예: git tag v0.1.1 && git push origin v0.1.1)
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to publish"
+        required: true
+        default: "v0.1.1"
+        type: string
+  push:
+    tags:
+      - "v*"
+
+# 릴리스 생성/업로드 권한
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # 병원 PC 가 Windows 우선이므로 Windows 를 먼저 둔다 (계획서 §20 권장 기본값)
+          - platform: windows-latest
+            args: ""
+            rust-targets: ""
+          # macOS — 인텔 + 애플실리콘 universal (.dmg)
+          - platform: macos-latest
+            args: "--target universal-apple-darwin"
+            rust-targets: "aarch64-apple-darwin,x86_64-apple-darwin"
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      # 태그만 올리고 package.json 버전을 안 올리면 산출물과 latest.json 이
+      # 이전 버전으로 나가 자동 업데이트가 조용히 죽는다. 빌드 전에 막는다.
+      - name: Verify tag matches app version
+        shell: bash
+        run: |
+          TAG="${{ inputs.release_tag || github.ref_name }}"
+          APP="v$(node -p "require('./package.json').version")"
+          CONF="v$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          echo "tag=$TAG package.json=$APP tauri.conf.json=$CONF"
+          if [ "$TAG" != "$APP" ] || [ "$TAG" != "$CONF" ]; then
+            echo "::error::태그($TAG)와 앱 버전(package.json=$APP, tauri.conf.json=$CONF)이 다릅니다."
+            exit 1
+          fi
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend deps
+        run: npm ci
+
+      - name: Build & publish (tauri-action)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 운영 병원 서버를 바라보게 빌드한다. Secret 이 없으면 로컬 기본값이 쓰인다.
+          VITE_API_BASE: ${{ secrets.VITE_API_BASE }}
+          # 업데이터 서명 키 — 자동 업데이트를 켤 때 등록한다 (아래 README 참고)
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # ── Apple 코드서명 + 공증 ──
+          # Secret 6개가 모두 있어야 한다. 하나라도 비면 tauri-action 이 서명을
+          # 시도하다 "failed to import keychain certificate" 로 죽는다.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          projectPath: .
+          tagName: ${{ inputs.release_tag || github.ref_name }}
+          releaseName: "튼튼 개발 학습 ${{ inputs.release_tag || github.ref_name }}"
+          releaseBody: "자동 빌드된 릴리스입니다. Windows는 .exe(setup), macOS는 .dmg를 받아 설치하세요."
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}

@@ -85,7 +85,7 @@ function DocumentDrawer({
       >
         {/* 패널 사이드 일체형 손잡이 탭 */}
         <div
-          className="absolute left-0 top-1/2 z-10 flex -translate-x-full -translate-y-1/2 flex-col items-center rounded-l-xl border border-r-0 border-surface-border bg-surface-raised p-1 shadow-[-4px_0_14px_rgba(0,0,0,0.07)]"
+          className="absolute left-0 top-4 z-10 flex -translate-x-full flex-col items-center rounded-l-xl border border-r-0 border-surface-border bg-surface-raised p-1 shadow-[-4px_0_14px_rgba(0,0,0,0.07)]"
           aria-label="드로워 크기 및 전체 페이지 열기"
         >
           {DRAWER_SIZES.map((size) => {

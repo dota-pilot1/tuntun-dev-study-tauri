@@ -4,6 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useAuthStore } from "./auth-store";
 import {
   ApiError,
+  getApiBase,
   getApiTarget,
   setApiTarget,
   SESSION_EXPIRED_MESSAGE,
@@ -49,7 +50,10 @@ function LoginScreen() {
     } catch (cause) {
       // 서버 401 문구와 폴백 문구가 같아서, 상태 코드를 같이 보여야 원인이 구분된다.
       if (cause instanceof ApiError) setError(`${cause.message} (HTTP ${cause.status})`);
-      else setError(cause instanceof Error ? cause.message : "로그인에 실패했습니다.");
+      else {
+        const detail = cause instanceof Error ? cause.message : "알 수 없는 네트워크 오류";
+        setError(`로그인 서버에 연결할 수 없습니다. (${getApiBase()}) ${detail}`);
+      }
     } finally {
       setBusy(false);
     }

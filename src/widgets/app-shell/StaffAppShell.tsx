@@ -100,7 +100,7 @@ function StaffAppShell({
       <nav
         aria-hidden={railCollapsed}
         className={
-          "flex shrink-0 flex-col items-center overflow-hidden text-text-on-brand transition-[width] duration-200 ease-in-out " +
+          "relative z-50 flex shrink-0 flex-col items-center overflow-visible text-text-on-brand transition-[width] duration-200 ease-in-out " +
           (railCollapsed ? "w-0" : "w-[72px]")
         }
         style={{

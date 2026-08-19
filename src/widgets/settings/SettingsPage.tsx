@@ -112,6 +112,7 @@ function SettingsPage() {
 function DatabaseSyncPanel({ apiTarget }: { apiTarget: ApiTarget }) {
   const localMode = apiTarget === "local";
   const [busy, setBusy] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const title = localMode ? "운영 DB를 로컬로 가져오기" : "로컬 DB를 운영으로 반영하기";
@@ -120,22 +121,16 @@ function DatabaseSyncPanel({ apiTarget }: { apiTarget: ApiTarget }) {
     : "로컬 개발 DB를 운영 DB에 반영합니다. 운영 DB를 덮어쓰기 전에 자동 백업을 생성합니다.";
 
   const runSync = async () => {
+    setConfirmOpen(true);
+  };
+
+  const executeSync = async () => {
+    setConfirmOpen(false);
     setBusy(true);
     setMessage("동기화를 시작했습니다. DB 크기에 따라 시간이 걸릴 수 있습니다.");
     setError(null);
     try {
-      // 상태 문구가 먼저 화면에 그려진 뒤 확인창을 열어, Tauri WebView에서
-      // 확인창이 뒤에 가려져 클릭이 무반응처럼 보이지 않게 한다.
       await new Promise((resolve) => window.setTimeout(resolve, 0));
-      const confirmed = window.confirm(
-        localMode
-          ? "운영 DB 데이터를 로컬 DB로 복사하시겠습니까?"
-          : "로컬 DB로 운영 DB를 덮어쓰고 백업을 생성하시겠습니까?",
-      );
-      if (!confirmed) {
-        setMessage("동기화를 취소했습니다.");
-        return;
-      }
       const output = await invoke<string>("db_sync", { direction: localMode ? "pull" : "push" });
       setMessage(output || "동기화가 완료되었습니다.");
     } catch (cause) {
@@ -186,6 +181,20 @@ function DatabaseSyncPanel({ apiTarget }: { apiTarget: ApiTarget }) {
         {localMode ? <ArrowDownToLine className="size-4" /> : <ArrowUpFromLine className="size-4" />}
         {busy ? "동기화 중..." : "동기화 실행"}
       </button>
+
+      {confirmOpen && (
+        <div className="fixed inset-0 z-[90] grid place-items-center bg-black/35 p-4" role="dialog" aria-modal="true" aria-label="DB 동기화 확인">
+          <div className="w-full max-w-md rounded-lg border border-surface-border bg-surface-raised p-5 shadow-xl">
+            <p className="text-base font-black text-text-primary">DB 동기화를 실행할까요?</p>
+            <p className="mt-2 text-sm font-semibold leading-6 text-text-secondary">{description}</p>
+            <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-900">백업과 대상 DB를 확인한 뒤 실행하세요.</p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => setConfirmOpen(false)} className="ui-icon-button h-9 px-4 text-sm font-bold">취소</button>
+              <button type="button" onClick={() => void executeSync()} className="ui-icon-button-brand h-9 px-4 text-sm font-black">실행</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {message && <p className="rounded-md border border-emerald-300/60 bg-emerald-50 px-4 py-3 text-[12px] font-semibold leading-5 text-emerald-900">{message}</p>}
       {error && <p className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-[12px] font-semibold leading-5 text-destructive">{error}</p>}

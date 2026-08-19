@@ -120,17 +120,26 @@ function DatabaseSyncPanel({ apiTarget }: { apiTarget: ApiTarget }) {
     : "로컬 개발 DB를 운영 DB에 반영합니다. 운영 DB를 덮어쓰기 전에 자동 백업을 생성합니다.";
 
   const runSync = async () => {
-    if (!localMode && !window.confirm("로컬 DB로 운영 DB를 덮어쓰고 백업을 생성하시겠습니까?")) {
-      return;
-    }
-    if (localMode && !window.confirm("운영 DB 데이터를 로컬 DB로 복사하시겠습니까?")) return;
     setBusy(true);
     setMessage("동기화를 시작했습니다. DB 크기에 따라 시간이 걸릴 수 있습니다.");
     setError(null);
     try {
+      // 상태 문구가 먼저 화면에 그려진 뒤 확인창을 열어, Tauri WebView에서
+      // 확인창이 뒤에 가려져 클릭이 무반응처럼 보이지 않게 한다.
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      const confirmed = window.confirm(
+        localMode
+          ? "운영 DB 데이터를 로컬 DB로 복사하시겠습니까?"
+          : "로컬 DB로 운영 DB를 덮어쓰고 백업을 생성하시겠습니까?",
+      );
+      if (!confirmed) {
+        setMessage("동기화를 취소했습니다.");
+        return;
+      }
       const output = await invoke<string>("db_sync", { direction: localMode ? "pull" : "push" });
       setMessage(output || "동기화가 완료되었습니다.");
     } catch (cause) {
+      console.error("DB sync failed", cause);
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setBusy(false);

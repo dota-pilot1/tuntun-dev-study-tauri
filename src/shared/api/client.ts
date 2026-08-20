@@ -9,7 +9,8 @@
  */
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 
-const LOCAL_API_BASE = "http://localhost:4301";
+// 개발 학습 서버(application-study)는 병원 운영 API와 분리되어 4302에서 실행된다.
+const LOCAL_API_BASE = "http://localhost:4302";
 const DEPLOY_API_BASE = import.meta.env.VITE_API_BASE ?? "https://dxline-tallent.com";
 
 const ACCESS_KEY = "tuntun.devstudy.accessToken";

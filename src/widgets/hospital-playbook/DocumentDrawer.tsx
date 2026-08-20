@@ -1,7 +1,9 @@
-import { Check, ChevronLeft, ChevronRight, ExternalLink, Link2, Pencil, Trash2, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Clipboard, ExternalLink, Link2, Pencil, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { writeText as writeClipboardText } from "@tauri-apps/plugin-clipboard-manager";
 import type { PlaybookDocument } from "../../features/hospital-playbook/api";
 import { playbookApi } from "../../features/hospital-playbook/api";
+import { lexicalToMarkdown } from "../../features/hospital-playbook/lexicalToMarkdown";
 import { ApiError, getApiBase } from "../../shared/api/client";
 import { LexicalEditor } from "../../shared/ui/lexical/lexical-editor";
 import { useToast } from "../../shared/ui/toast";
@@ -16,6 +18,12 @@ const DRAWER_SIZES = [
 ] as const;
 
 async function copyToClipboard(value: string) {
+  try {
+    await writeClipboardText(value);
+    return;
+  } catch {
+    // 웹 개발 서버에서는 Tauri 플러그인이 없을 수 있어 브라우저 방식으로 보완한다.
+  }
   if (navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(value);
     return;
@@ -68,6 +76,7 @@ function DocumentDrawer({
   const [isSharing, setIsSharing] = useState(false);
   const [isIssuingAiToken, setIsIssuingAiToken] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
+  const [aiContentCopied, setAiContentCopied] = useState(false);
 
   useEffect(() => {
     setIsClosing(false);
@@ -125,6 +134,24 @@ function DocumentDrawer({
       showToast(error instanceof ApiError ? `AI 편집 토큰 발급 실패: ${error.message}` : "AI 편집 정보를 클립보드에 복사하지 못했습니다.", "error");
     } finally {
       setIsIssuingAiToken(false);
+    }
+  };
+
+  const copyAiContent = async () => {
+    if (isSharing) return;
+    setIsSharing(true);
+    try {
+      const { token } = await playbookApi.shareDocument(document.id);
+      const url = `${getApiBase()}/api/public/hospital-playbook/documents/${token}`;
+      const markdown = lexicalToMarkdown(document.content);
+      await copyToClipboard([`# ${document.title}`, "", markdown, "", "---", `원문 API: ${url}`].join("\n"));
+      setAiContentCopied(true);
+      showToast("AI용 Markdown 내용을 복사했습니다.");
+      window.setTimeout(() => setAiContentCopied(false), 1800);
+    } catch (error) {
+      showToast(error instanceof ApiError ? `AI용 내용 발급 실패: ${error.message}` : "AI용 내용을 클립보드에 복사하지 못했습니다.", "error");
+    } finally {
+      setIsSharing(false);
     }
   };
 
@@ -195,6 +222,16 @@ function DocumentDrawer({
           </button>
           <button
             type="button"
+            aria-label="AI용 Markdown 내용 복사"
+            title="AI용 Markdown 내용 복사"
+            onClick={() => void copyAiContent()}
+            disabled={isSharing}
+            className="grid size-7.5 place-items-center rounded-lg text-text-muted transition-all hover:bg-brand-glass hover:text-brand-primary hover:scale-105 disabled:opacity-50"
+          >
+            {aiContentCopied ? <Check className="size-3.5" /> : <Clipboard className="size-3.5" />}
+          </button>
+          <button
+            type="button"
             aria-label="AI 편집 연결 정보 복사"
             title="AI 편집 연결 정보 복사 (작성자/관리자 전용)"
             onClick={() => void copyAiEditConnection()}
@@ -232,6 +269,9 @@ function DocumentDrawer({
           </button>}
           <button type="button" className="ui-icon-button size-8 text-brand-primary" onClick={() => void copyShareLink()} disabled={isSharing} title="로그인 없이 읽는 API 링크 복사">
             {shareCopied ? <Check className="size-4" /> : <Link2 className="size-4" />}
+          </button>
+          <button type="button" className="ui-icon-button size-8" onClick={() => void copyAiContent()} disabled={isSharing} title="AI용 Markdown 내용 복사">
+            {aiContentCopied ? <Check className="size-4" /> : <Clipboard className="size-4" />}
           </button>
           <button type="button" className="ui-icon-button size-8 text-destructive" onClick={() => setDeleteConfirmOpen(true)} title="삭제">
             <Trash2 className="size-4" />

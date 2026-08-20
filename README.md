@@ -19,7 +19,7 @@ npm run tauri dev
 
 웹 개발 서버는 `http://localhost:4330`을 사용합니다.
 배포 API 기본 주소는 `https://dxline-tallent.com`이며,
-로컬에서는 튼튼 병원 서버 `http://localhost:4301`을 사용합니다.
+로컬에서는 개발 학습 서버 `http://localhost:4302`를 사용합니다.
 개발 기본 계정은 `terecal@daum.net / password123`로 미리 입력됩니다.
 
 ## 확장 방향

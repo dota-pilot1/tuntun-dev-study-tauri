@@ -13,6 +13,7 @@
     "core:window:allow-close",
     "opener:default",
     "process:default",
+    "clipboard-manager:allow-write-text",
     "updater:default",
     {
       "identifier": "http:default",
@@ -22,6 +23,9 @@
         },
         {
           "url": "http://localhost:4301/*"
+        },
+        {
+          "url": "http://localhost:4302/*"
         },
         {
           "url": "http://127.0.0.1:4301/*"

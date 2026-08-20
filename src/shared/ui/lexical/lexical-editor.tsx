@@ -495,7 +495,7 @@ export function LexicalEditor({
   return (
     <LexicalComposer initialConfig={initialConfig}>
       <div
-        className={`lexical-editor flex min-h-0 flex-col bg-surface-raised ${readOnly ? 'lexical-editor-readonly' : ''}`}
+        className={`lexical-editor flex min-h-0 flex-1 flex-col bg-surface-raised ${readOnly ? 'lexical-editor-readonly' : ''}`}
         style={height ? { height } : undefined}
       >
         {readOnly ? null : (

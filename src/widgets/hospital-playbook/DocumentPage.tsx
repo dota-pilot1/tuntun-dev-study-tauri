@@ -1,4 +1,4 @@
-import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { DndContext, DragOverlay, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent, type DragOverEvent, type DragStartEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useQuery } from "@tanstack/react-query";
@@ -40,6 +40,7 @@ function SortableDocumentRow({
   children,
   onToggle,
   onNavigate,
+  dropTarget,
 }: {
   row: DocumentRow;
   activeId: number;
@@ -47,9 +48,13 @@ function SortableDocumentRow({
   children: Map<number, PlaybookDocumentSummary[]>;
   onToggle: (id: number) => void;
   onNavigate: (id: number) => void;
+  dropTarget: boolean;
 }) {
   const { document, depth, indexPath, visible } = row;
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: document.id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: document.id,
+    animateLayoutChanges: () => true,
+  });
   const hasChildren = (children.get(document.id)?.length ?? 0) > 0;
   const isActive = document.id === activeId;
 
@@ -57,7 +62,7 @@ function SortableDocumentRow({
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition, paddingLeft: `${8 + depth * 22}px` }}
-      className={`${visible ? "flex" : "hidden"} min-h-10 items-center gap-1.5 rounded-md pr-2 ${isDragging ? "z-10 opacity-45 shadow-lg" : ""} ${isActive ? "border-l-2 border-brand-border bg-brand-glass" : "hover:bg-surface-muted"}`}
+      className={`${visible ? "flex" : "hidden"} min-h-10 items-center gap-1.5 rounded-md pr-2 transition-[transform,background-color,box-shadow,opacity] duration-200 ${isDragging ? "z-10 scale-[1.02] opacity-60 shadow-lg ring-2 ring-brand-border/40" : ""} ${dropTarget ? "bg-brand-glass ring-2 ring-brand-border/60" : ""} ${isActive ? "border-l-2 border-brand-border bg-brand-glass" : "hover:bg-surface-muted"}`}
     >
       <button type="button" {...attributes} {...listeners} className="grid size-5 shrink-0 cursor-grab touch-none place-items-center text-text-muted active:cursor-grabbing" title="드래그하여 같은 단계에서 순서 변경">
         <GripVertical className="size-3.5" />
@@ -115,6 +120,8 @@ export default function DocumentPage({
 }) {
   const [collapsed, setCollapsed] = useState<Set<number>>(() => new Set());
   const [locationOpen, setLocationOpen] = useState(false);
+  const [draggedId, setDraggedId] = useState<number | null>(null);
+  const [overId, setOverId] = useState<number | null>(null);
   const [nextCategoryId, setNextCategoryId] = useState(categoryId);
   const [nextTopicId, setNextTopicId] = useState(topicId);
   const document = useQuery({ queryKey: ["hospital-playbook", "document", documentId], queryFn: () => playbookApi.document(documentId) });
@@ -154,6 +161,8 @@ export default function DocumentPage({
   };
 
   const handleDragEnd = async ({ active, over }: DragEndEvent) => {
+    setOverId(null);
+    window.setTimeout(() => setDraggedId(null), 700);
     if (!over || active.id === over.id) return;
     const source = documents.find((item) => item.id === active.id);
     const target = documents.find((item) => item.id === over.id);
@@ -163,6 +172,21 @@ export default function DocumentPage({
     const to = siblings.findIndex((item) => item.id === target.id);
     if (from < 0 || to < 0) return;
     await onReorder(arrayMove(siblings, from, to).map((item) => item.id), source.parentId);
+  };
+
+  const handleDragStart = ({ active }: DragStartEvent) => {
+    setDraggedId(Number(active.id));
+    setOverId(null);
+  };
+
+  const handleDragOver = ({ active, over }: DragOverEvent) => {
+    if (!over || active.id === over.id) {
+      setOverId(null);
+      return;
+    }
+    const source = documents.find((item) => item.id === active.id);
+    const target = documents.find((item) => item.id === over.id);
+    setOverId(source && target && source.parentId === target.parentId ? Number(over.id) : null);
   };
 
   const refresh = async () => {
@@ -190,12 +214,27 @@ export default function DocumentPage({
               <div><h2 className="text-sm font-black text-text-primary">문서 목록</h2><p className="mt-0.5 text-[10px] font-semibold text-text-muted">같은 단계에서 드래그해 순서를 바꿉니다.</p></div>
               <span className="rounded-md bg-surface-muted px-2 py-1 text-[10px] font-black text-text-muted">{rows.length}</span>
             </div>
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(event) => void handleDragEnd(event)}>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDragCancel={() => { setDraggedId(null); setOverId(null); }}
+              onDragEnd={(event) => void handleDragEnd(event)}
+            >
               <SortableContext items={rows.map((row) => row.document.id)} strategy={verticalListSortingStrategy}>
                 <div className={`mt-2 space-y-1 ${reordering ? "pointer-events-none opacity-60" : ""}`}>
-                  {rows.map((row) => <SortableDocumentRow key={row.document.id} row={row} activeId={documentId} collapsed={collapsed} children={children} onToggle={toggleCollapsed} onNavigate={onNavigate} />)}
+                  {rows.map((row) => <SortableDocumentRow key={row.document.id} row={row} activeId={documentId} collapsed={collapsed} children={children} onToggle={toggleCollapsed} onNavigate={onNavigate} dropTarget={overId === row.document.id} />)}
                 </div>
               </SortableContext>
+              <DragOverlay dropAnimation={{ duration: 700, easing: "cubic-bezier(0.22, 1, 0.36, 1)" }}>
+                {draggedId !== null ? (
+                  <div className="flex min-h-10 items-center gap-2 rounded-md border border-brand-border bg-surface-raised px-3 text-xs font-black text-text-primary shadow-xl">
+                    <GripVertical className="size-3.5 text-brand-primary" />
+                    {documents.find((item) => item.id === draggedId)?.title ?? "문서 이동"}
+                  </div>
+                ) : null}
+              </DragOverlay>
             </DndContext>
           </aside>
           <section className="min-w-0 overflow-hidden rounded-lg border border-surface-border bg-surface-raised shadow-sm">

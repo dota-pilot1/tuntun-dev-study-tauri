@@ -10,7 +10,8 @@ import { usePendingHandoffCount } from "../../features/handoff/queries";
 
 const APP_VERSION = __APP_VERSION__;
 
-const RAIL_COLLAPSED_KEY = "tuntun.kiosk.railCollapsed";
+// 레일 상태 키를 버전업해, 복사된 앱/이전 빌드의 접힘 상태가 새 앱을 가리지 않게 한다.
+const RAIL_COLLAPSED_KEY = "tuntun.kiosk.railCollapsed.v2";
 
 /**
  * 직원 콘솔 셸. 참조앱(tc-dx-mybatis) 레일 구조를 병원 브랜드로 옮겼다.
@@ -233,7 +234,7 @@ function StaffAppShell({
           <div
             key={contentRefreshKey}
             className={
-              "flex min-w-0 flex-1 flex-col transition-opacity duration-300 " +
+              "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden transition-opacity duration-300 " +
               (isRefreshingContent ? "opacity-60" : "opacity-100")
             }
           >

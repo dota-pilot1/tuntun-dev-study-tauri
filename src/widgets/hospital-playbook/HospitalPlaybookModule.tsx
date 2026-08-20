@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
+import { DndContext, DragOverlay, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent, type DragOverEvent, type DragStartEvent } from "@dnd-kit/core";
+import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, ExternalLink, FileText, GitBranch, Loader2, Plus, RefreshCw } from "lucide-react";
 import PageHeader from "../../shared/ui/PageHeader";
@@ -16,6 +19,58 @@ const TOPIC_WIDTH_KEY = "tuntun-dev-study-topic-width";
 const EMPTY_CATEGORIES: PlaybookCategory[] = [];
 const EMPTY_TOPICS: PlaybookCategory["topics"] = [];
 const EMPTY_DOCUMENTS: PlaybookDocumentSummary[] = [];
+
+function SortableTreeDocumentRow({
+  document,
+  depth,
+  indexPath,
+  childCount,
+  expanded,
+  isDropTarget,
+  onOpen,
+  onToggle,
+  onAddChild,
+  onOpenPage,
+}: {
+  document: PlaybookDocumentSummary;
+  depth: number;
+  indexPath: number[];
+  childCount: number;
+  expanded: boolean;
+  isDropTarget: boolean;
+  onOpen: () => void;
+  onToggle: () => void;
+  onAddChild: () => void;
+  onOpenPage: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: document.id,
+    // 드롭 직후 서버/캐시 순서가 바뀌어도 형제 항목이 레이아웃 이동을 애니메이션하도록 한다.
+    animateLayoutChanges: () => true,
+  });
+  const hasChildren = childCount > 0;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ marginLeft: `${depth * 24}px`, transform: CSS.Transform.toString(transform), transition: transition ?? "transform 700ms cubic-bezier(0.22, 1, 0.36, 1)", willChange: "transform" }}
+      className={`flex min-h-12 items-center gap-2 rounded-md border border-surface-border-soft bg-surface-muted px-2.5 transition-[background-color,box-shadow,opacity] duration-200 hover:border-brand-border ${isDragging ? "z-10 scale-[1.02] opacity-55 shadow-xl ring-2 ring-brand-border/50" : ""} ${isDropTarget ? "border-brand-border bg-brand-glass ring-2 ring-brand-border/70" : ""}`}
+    >
+      <button type="button" {...attributes} {...listeners} className="grid size-5 shrink-0 cursor-grab touch-none place-items-center text-text-muted active:cursor-grabbing" title="드래그하여 같은 단계에서 순서 변경" aria-label={`${document.title} 드래그`}>
+        ⠿
+      </button>
+      <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+        <span className="grid size-7 shrink-0 place-items-center rounded-md border border-surface-border-soft bg-surface-raised text-[11px] font-black text-text-muted">{indexPath.join(".")}</span>
+        <FileText className="size-4 shrink-0 text-brand-primary" />
+        {depth > 0 && <span className="text-xs font-bold text-brand-primary">ㄴ</span>}
+        <span className="truncate text-sm font-black text-text-primary">{document.title}{hasChildren && <span className="ml-1.5 text-xs font-bold text-text-muted">({childCount})</span>}</span>
+      </button>
+      {hasChildren && <button type="button" onClick={onToggle} className="ui-icon-button size-7" title={expanded ? "하위 문서 접기" : "하위 문서 펼치기"}><ChevronRight className={(expanded ? "rotate-90 " : "") + "size-4 transition-transform"} /></button>}
+      {depth < 1 && <button type="button" onClick={onAddChild} className="ui-icon-button size-7 text-brand-primary" title="하위 문서 추가"><GitBranch className="size-3.5" /></button>}
+      <button type="button" onClick={onOpenPage} className="ui-icon-button size-7" title="전체 페이지로 보기"><ExternalLink className="size-3.5" /></button>
+    </div>
+  );
+}
 
 function storedWidth(key: string, fallback: number) {
   const value = Number(window.localStorage.getItem(key));
@@ -51,6 +106,9 @@ function HospitalPlaybookModule() {
   const [pageDocumentId, setPageDocumentId] = useState<number | null>(null);
   const [expandedDocumentIds, setExpandedDocumentIds] = useState<Set<number>>(() => new Set());
   const [dragDocumentId, setDragDocumentId] = useState<number | null>(null);
+  const [dragOverDocumentId, setDragOverDocumentId] = useState<number | null>(null);
+  const [isRefreshingTree, setIsRefreshingTree] = useState(false);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const [categoryWidth, setCategoryWidth] = useState(() => storedWidth(CATEGORY_WIDTH_KEY, 280));
   const [topicWidth, setTopicWidth] = useState(() => storedWidth(TOPIC_WIDTH_KEY, 300));
 
@@ -113,6 +171,23 @@ function HospitalPlaybookModule() {
   });
   const reorderDocuments = useMutation({
     mutationFn: (value: { topicId: number; ids: number[]; parentId: number | null }) => playbookApi.reorderDocuments(value.topicId, value.ids, value.parentId),
+    onMutate: (value) => {
+      // 서버 응답을 기다리지 않고 캐시를 먼저 바꿔야 dnd-kit이 이동 경로를 애니메이션으로 계산한다.
+      queryClient.setQueryData<PlaybookCategory[]>(PLAYBOOK_TREE_KEY, (current) => current?.map((category) => ({
+        ...category,
+        topics: category.topics.map((item) => {
+          if (item.id !== value.topicId) return item;
+          const moving = item.documents.filter((document) => document.parentId === value.parentId);
+          const byId = new Map(moving.map((document) => [document.id, document]));
+          const reordered = value.ids.map((id) => byId.get(id)).filter((document): document is PlaybookDocumentSummary => Boolean(document));
+          return {
+            ...item,
+            documents: item.documents.map((document) => document.parentId === value.parentId ? reordered.shift() ?? document : document),
+          };
+        }),
+      })));
+    },
+    onError: () => { void queryClient.invalidateQueries({ queryKey: PLAYBOOK_TREE_KEY }); },
     onSuccess: invalidate,
   });
 
@@ -125,17 +200,43 @@ function HospitalPlaybookModule() {
     return true;
   };
   const createNewDocument = (parentId: number | null = null) => { if (topic) createDocument.mutate({ topicId: topic.id, parentId }); };
-  const dropDocument = (target: PlaybookDocumentSummary) => {
-    if (!topic || dragDocumentId === null || dragDocumentId === target.id) return;
-    const source = documents.find((item) => item.id === dragDocumentId);
-    if (!source || source.parentId !== target.parentId) return;
+  const refreshTree = async () => {
+    if (isRefreshingTree) return;
+    setIsRefreshingTree(true);
+    const startedAt = Date.now();
+    try {
+      await tree.refetch();
+    } finally {
+      const remaining = Math.max(0, 650 - (Date.now() - startedAt));
+      window.setTimeout(() => setIsRefreshingTree(false), remaining);
+    }
+  };
+  const handleTreeDragStart = ({ active }: DragStartEvent) => {
+    setDragDocumentId(Number(active.id));
+    setDragOverDocumentId(null);
+  };
+  const handleTreeDragOver = ({ active, over }: DragOverEvent) => {
+    if (!over || active.id === over.id) {
+      setDragOverDocumentId(null);
+      return;
+    }
+    const source = documents.find((item) => item.id === active.id);
+    const target = documents.find((item) => item.id === over.id);
+    setDragOverDocumentId(source && target && source.parentId === target.parentId ? Number(over.id) : null);
+  };
+  const handleTreeDragEnd = ({ active, over }: DragEndEvent) => {
+    setDragOverDocumentId(null);
+    // DragOverlay가 dnd-kit의 dropAnimation을 재생할 시간을 확보한 뒤 제거한다.
+    window.setTimeout(() => setDragDocumentId(null), 700);
+    if (!topic || !over || active.id === over.id) return;
+    const source = documents.find((item) => item.id === active.id);
+    const target = documents.find((item) => item.id === over.id);
+    if (!source || !target || source.parentId !== target.parentId) return;
     const siblings = documents.filter((item) => item.parentId === source.parentId);
     const from = siblings.findIndex((item) => item.id === source.id);
     const to = siblings.findIndex((item) => item.id === target.id);
-    const next = [...siblings];
-    next.splice(to, 0, ...next.splice(from, 1));
-    reorderDocuments.mutate({ topicId: topic.id, ids: next.map((item) => item.id), parentId: source.parentId });
-    setDragDocumentId(null);
+    if (from < 0 || to < 0) return;
+    reorderDocuments.mutate({ topicId: topic.id, ids: arrayMove(siblings, from, to).map((item) => item.id), parentId: source.parentId });
   };
 
   const detail = drawerDocument.data;
@@ -175,7 +276,7 @@ function HospitalPlaybookModule() {
       <PageHeader hideRefresh>
         <FileText className="size-4 text-brand-primary" />
         <span className="text-[14px] font-bold tracking-tight text-text-primary">개발 학습 노트</span>
-        <button type="button" onClick={() => void tree.refetch()} disabled={tree.isFetching} className="ui-icon-button ml-1 size-7 disabled:opacity-40" title="노트 새로고침"><RefreshCw className={`size-3.5 ${tree.isFetching ? "animate-spin" : ""}`} /></button>
+        <button type="button" onClick={() => void refreshTree()} disabled={isRefreshingTree} className="ui-icon-button ml-1 size-7 disabled:opacity-40" title="노트 새로고침"><RefreshCw className={`size-3.5 ${isRefreshingTree ? "refresh-icon-spin" : ""}`} /></button>
       </PageHeader>
       <div className="min-h-0 flex-1 overflow-auto bg-surface-muted p-4">
         {tree.isPending ? <div className="grid h-full place-items-center text-text-muted"><Loader2 className="size-6 animate-spin" /></div> : tree.isError ? <div className="grid h-full place-items-center text-sm font-semibold text-text-muted">노트를 불러오지 못했습니다.</div> : (
@@ -220,84 +321,46 @@ function HospitalPlaybookModule() {
               ) : (
                 <div className="min-h-0 flex-1 overflow-y-auto p-3">
                   {documentRows.length ? (
-                    <div className="space-y-1.5">
-                      {documentRows.map(({ document, depth, indexPath }) => {
-                        const childCount = children.get(document.id)?.length ?? 0;
-                        const hasChildren = childCount > 0;
-                        const expanded = expandedDocumentIds.has(document.id);
-                        return (
-                          <div
-                            key={document.id}
-                            draggable
-                            onDragStart={() => setDragDocumentId(document.id)}
-                            onDragEnd={() => setDragDocumentId(null)}
-                            onDragOver={(event) => event.preventDefault()}
-                            onDrop={() => dropDocument(document)}
-                            className={(isVisible(document) ? "flex animate-sub-doc-fade-in" : "hidden") + " min-h-12 items-center gap-2 rounded-md border border-surface-border-soft bg-surface-muted px-2.5 transition hover:border-brand-border"}
-                            style={{ marginLeft: `${depth * 24}px` }}
-                          >
-                            <span className="cursor-grab text-text-muted" title="드래그하여 같은 단계에서 순서 변경">⠿</span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditingDocumentId(null);
-                                setDrawerDocumentId(document.id);
-                              }}
-                              className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                            >
-                              <span className="grid size-7 shrink-0 place-items-center rounded-md border border-surface-border-soft bg-surface-raised text-[11px] font-black text-text-muted">
-                                {indexPath.join(".")}
-                              </span>
-                              <FileText className="size-4 shrink-0 text-brand-primary" />
-                              {depth > 0 && <span className="text-xs font-bold text-brand-primary">ㄴ</span>}
-                              <span className="truncate text-sm font-black text-text-primary">
-                                {document.title}
-                                {hasChildren && (
-                                  <span className="ml-1.5 text-xs font-bold text-text-muted">
-                                    ({childCount})
-                                  </span>
-                                )}
-                              </span>
-                            </button>
-                            {hasChildren && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setExpandedDocumentIds((current) => {
-                                    const nextIds = new Set(current);
-                                    if (nextIds.has(document.id)) nextIds.delete(document.id);
-                                    else nextIds.add(document.id);
-                                    return nextIds;
-                                  })
-                                }
-                                className="ui-icon-button size-7"
-                                title={expanded ? "하위 문서 접기" : "하위 문서 펼치기"}
-                              >
-                                <ChevronRight className={(expanded ? "rotate-90 " : "") + "size-4 transition-transform"} />
-                              </button>
-                            )}
-                            {depth < 1 && (
-                              <button
-                                type="button"
-                                onClick={() => createNewDocument(document.id)}
-                                className="ui-icon-button size-7 text-brand-primary"
-                                title="하위 문서 추가"
-                              >
-                                <GitBranch className="size-3.5" />
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => setPageDocumentId(document.id)}
-                              className="ui-icon-button size-7"
-                              title="전체 페이지로 보기"
-                            >
-                              <ExternalLink className="size-3.5" />
-                            </button>
+                    <DndContext
+                      sensors={sensors}
+                      collisionDetection={closestCenter}
+                      onDragStart={handleTreeDragStart}
+                      onDragOver={handleTreeDragOver}
+                      onDragCancel={() => { setDragDocumentId(null); setDragOverDocumentId(null); }}
+                      onDragEnd={handleTreeDragEnd}
+                    >
+                      <SortableContext items={documentRows.filter(({ document }) => isVisible(document)).map(({ document }) => document.id)} strategy={verticalListSortingStrategy}>
+                        <div className="space-y-1.5">
+                          {documentRows.map(({ document, depth, indexPath }) => isVisible(document) ? (
+                            <SortableTreeDocumentRow
+                              key={document.id}
+                              document={document}
+                              depth={depth}
+                              indexPath={indexPath}
+                              childCount={children.get(document.id)?.length ?? 0}
+                              expanded={expandedDocumentIds.has(document.id)}
+                              isDropTarget={dragOverDocumentId === document.id}
+                              onOpen={() => { setEditingDocumentId(null); setDrawerDocumentId(document.id); }}
+                              onToggle={() => setExpandedDocumentIds((current) => {
+                                const nextIds = new Set(current);
+                                if (nextIds.has(document.id)) nextIds.delete(document.id); else nextIds.add(document.id);
+                                return nextIds;
+                              })}
+                              onAddChild={() => createNewDocument(document.id)}
+                              onOpenPage={() => setPageDocumentId(document.id)}
+                            />
+                          ) : null)}
+                        </div>
+                      </SortableContext>
+                      <DragOverlay dropAnimation={{ duration: 700, easing: "cubic-bezier(0.22, 1, 0.36, 1)" }}>
+                        {dragDocumentId !== null ? (
+                          <div className="flex min-h-12 items-center gap-2 rounded-md border border-brand-border bg-surface-raised px-3 text-sm font-black text-text-primary shadow-2xl">
+                            <span className="text-brand-primary">⠿</span>
+                            {documents.find((item) => item.id === dragDocumentId)?.title ?? "문서 이동"}
                           </div>
-                        );
-                      })}
-                    </div>
+                        ) : null}
+                      </DragOverlay>
+                    </DndContext>
                   ) : (
                     <div className="grid min-h-48 place-items-center text-sm font-semibold text-text-muted">
                       문서를 추가해 학습 흐름을 구성하세요.

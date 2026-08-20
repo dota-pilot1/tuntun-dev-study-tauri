@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, RotateCcw, Save } from "lucide-react";
 import { playbookApi } from "../../features/hospital-playbook/api";
 import { LexicalEditor } from "../../shared/ui/lexical/lexical-editor";
+import { useToast } from "../../shared/ui/toast";
 
 /**
  * 선택한 개발 문서의 편집 영역.
@@ -16,6 +17,7 @@ function DocumentPane({
   onChanged: () => void;
 }) {
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const key = ["hospital-playbook", "document", documentId];
   const document = useQuery({ queryKey: key, queryFn: () => playbookApi.document(documentId) });
 
@@ -23,13 +25,15 @@ function DocumentPane({
   const [content, setContent] = useState("");
   const [editorRevision, setEditorRevision] = useState(0);
   const [saveMessage, setSaveMessage] = useState("");
-
-  // 다른 문서로 갈아탈 때만 편집 중인 내용을 서버 값으로 되돌린다.
+  // 상세 조회가 비동기로 끝난 뒤 Lexical 편집기도 서버 본문으로 초기화한다.
+  // LexicalEditor의 initialState는 마운트 시 한 번만 사용되므로, 문서 데이터가
+  // 준비되면 editorRevision을 증가시켜 빈 편집기가 남지 않게 한다.
   useEffect(() => {
     if (!document.data) return;
     setTitle(document.data.title);
     setContent(document.data.content);
-  }, [document.data?.id, document.data?.title, document.data?.content]);
+    setEditorRevision((revision) => revision + 1);
+  }, [document.data?.id, document.data?.updatedAt]);
 
   const afterWrite = (saved: Awaited<ReturnType<typeof playbookApi.updateDocument>>) => {
     // 같은 문서에서는 id가 바뀌지 않으므로, 성공 응답을 직접 기준값으로 삼아야
@@ -38,7 +42,8 @@ function DocumentPane({
     setTitle(saved.title);
     setContent(saved.content);
     setEditorRevision((revision) => revision + 1);
-    setSaveMessage("저장했습니다.");
+    setSaveMessage("");
+    showToast("저장했습니다.");
     void queryClient.invalidateQueries({ queryKey: key });
     onChanged();
   };

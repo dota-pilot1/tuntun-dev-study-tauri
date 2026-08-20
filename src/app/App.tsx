@@ -11,6 +11,7 @@ import HandoffModule from "../widgets/handoff/HandoffModule";
 import SettingsPage from "../widgets/settings/SettingsPage";
 import ProfilePage from "../widgets/profile/ProfilePage";
 import type { StaffViewId } from "../shared/config/app-modules";
+import { ToastProvider } from "../shared/ui/toast";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -56,8 +57,10 @@ export default function App() {
   }
 
   return (
-    <QueryClientProvider client={queryClient}>
-      {user ? <StaffConsole /> : <LoginScreen />}
-    </QueryClientProvider>
+    <ToastProvider>
+      <QueryClientProvider client={queryClient}>
+        {user ? <StaffConsole /> : <LoginScreen />}
+      </QueryClientProvider>
+    </ToastProvider>
   );
 }

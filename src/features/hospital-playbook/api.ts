@@ -55,6 +55,18 @@ export const playbookApi = {
   document: (id: number) =>
     request<PlaybookDocument>(`${BASE}/documents/${id}`, { errorMessage: "문서를 불러오지 못했습니다." }),
 
+  shareDocument: (id: number) =>
+    request<{ token: string }>(`${BASE}/documents/${id}/share`, {
+      method: "POST",
+      errorMessage: "공유 링크를 만들지 못했습니다.",
+    }),
+
+  issueAiEditToken: (id: number) =>
+    request<{ token: string; documentId: number; expectedVersion: number; expiresAt: string }>(`${BASE}/documents/${id}/ai-edit-token`, {
+      method: "POST",
+      errorMessage: "AI 편집 토큰을 만들지 못했습니다. 작성자 또는 관리자만 발급할 수 있습니다.",
+    }),
+
   createCategory: (title: string) =>
     request<PlaybookCategory>(`${BASE}/categories`, {
       method: "POST",

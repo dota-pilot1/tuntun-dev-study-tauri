@@ -1,7 +1,10 @@
-import { ChevronLeft, ChevronRight, ExternalLink, Pencil, Trash2, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, ExternalLink, Link2, Pencil, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { PlaybookDocument } from "../../features/hospital-playbook/api";
+import { playbookApi } from "../../features/hospital-playbook/api";
+import { ApiError, getApiBase } from "../../shared/api/client";
 import { LexicalEditor } from "../../shared/ui/lexical/lexical-editor";
+import { useToast } from "../../shared/ui/toast";
 import DocumentComments from "./DocumentComments";
 import DocumentPane from "./DocumentPane";
 
@@ -11,6 +14,22 @@ const DRAWER_SIZES = [
   { label: "M", value: 60 },
   { label: "L", value: 80 },
 ] as const;
+
+async function copyToClipboard(value: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand("copy");
+  textarea.remove();
+  if (!copied) throw new Error("CLIPBOARD_UNAVAILABLE");
+}
 
 function storedDrawerSize() {
   const value = Number(window.localStorage.getItem(DRAWER_SIZE_KEY));
@@ -45,6 +64,10 @@ function DocumentDrawer({
   const [isEditing, setIsEditing] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [drawerSize, setDrawerSize] = useState(storedDrawerSize);
+  const { showToast } = useToast();
+  const [isSharing, setIsSharing] = useState(false);
+  const [isIssuingAiToken, setIsIssuingAiToken] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
 
   useEffect(() => {
     setIsClosing(false);
@@ -56,6 +79,53 @@ function DocumentDrawer({
     setTimeout(() => {
       onClose();
     }, 200);
+  };
+
+  const copyShareLink = async () => {
+    if (isSharing) return;
+    setIsSharing(true);
+    try {
+      const { token } = await playbookApi.shareDocument(document.id);
+      const url = `${getApiBase()}/api/public/hospital-playbook/documents/${token}`;
+      await copyToClipboard(url);
+      setShareCopied(true);
+      showToast("공유 링크를 복사했습니다.");
+      window.setTimeout(() => setShareCopied(false), 1800);
+    } catch (error) {
+      showToast(error instanceof ApiError ? `공유 링크 발급 실패: ${error.message}` : "클립보드에 복사하지 못했습니다.", "error");
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
+  const copyAiEditConnection = async () => {
+    if (isIssuingAiToken) return;
+    setIsIssuingAiToken(true);
+    try {
+      const issued = await playbookApi.issueAiEditToken(document.id);
+      const apiBase = getApiBase();
+      const endpoint = `${apiBase}/api/public/hospital-playbook/ai-edit/documents/${issued.documentId}`;
+      const connection = [
+        "TUNTUN AI EDIT CONNECTION",
+        `documentId: ${issued.documentId}`,
+        `expectedVersion: ${issued.expectedVersion}`,
+        `expiresAt: ${issued.expiresAt}`,
+        "",
+        `GET ${endpoint}`,
+        `PATCH ${endpoint}`,
+        "Authorization: Bearer <TOKEN>",
+        `TOKEN: ${issued.token}`,
+        "",
+        'PATCH body: {"title":"수정 제목","content":"수정 본문","expectedVersion":<CURRENT_VERSION>}',
+        "이 토큰은 해당 문서에 한 번 저장한 뒤 폐기됩니다.",
+      ].join("\n");
+      await copyToClipboard(connection);
+      showToast("AI 편집 연결 정보를 복사했습니다.");
+    } catch (error) {
+      showToast(error instanceof ApiError ? `AI 편집 토큰 발급 실패: ${error.message}` : "AI 편집 정보를 클립보드에 복사하지 못했습니다.", "error");
+    } finally {
+      setIsIssuingAiToken(false);
+    }
   };
 
   useEffect(() => {
@@ -85,7 +155,7 @@ function DocumentDrawer({
       >
         {/* 패널 사이드 일체형 손잡이 탭 */}
         <div
-          className="absolute left-0 top-4 z-10 flex -translate-x-full flex-col items-center rounded-l-xl border border-r-0 border-surface-border bg-surface-raised p-1 shadow-[-4px_0_14px_rgba(0,0,0,0.07)]"
+          className="absolute left-0 top-32 z-10 flex -translate-x-full flex-col items-center rounded-l-xl border border-r-0 border-surface-border bg-surface-raised p-1 shadow-[-4px_0_14px_rgba(0,0,0,0.07)]"
           aria-label="드로워 크기 및 전체 페이지 열기"
         >
           {DRAWER_SIZES.map((size) => {
@@ -111,6 +181,28 @@ function DocumentDrawer({
               </button>
             );
           })}
+
+          <div className="my-1 h-px w-5 bg-surface-border-soft" />
+          <button
+            type="button"
+            aria-label="로그인 없이 읽는 API 링크 복사"
+            title="로그인 없이 읽는 API 링크 복사"
+            onClick={() => void copyShareLink()}
+            disabled={isSharing}
+            className="grid size-7.5 place-items-center rounded-lg text-text-muted transition-all hover:bg-brand-glass hover:text-brand-primary hover:scale-105 disabled:opacity-50"
+          >
+            {shareCopied ? <Check className="size-3.5" /> : <Link2 className="size-3.5" />}
+          </button>
+          <button
+            type="button"
+            aria-label="AI 편집 연결 정보 복사"
+            title="AI 편집 연결 정보 복사 (작성자/관리자 전용)"
+            onClick={() => void copyAiEditConnection()}
+            disabled={isIssuingAiToken}
+            className="grid size-7.5 place-items-center rounded-lg text-text-muted transition-all hover:bg-brand-glass hover:text-brand-primary hover:scale-105 disabled:opacity-50"
+          >
+            <Pencil className="size-3.5" />
+          </button>
 
           {onOpenPage && (
             <>
@@ -138,6 +230,9 @@ function DocumentDrawer({
           {onOpenPage && <button type="button" className="ui-icon-button size-8" onClick={onOpenPage} title="전체 페이지로 보기">
             <ExternalLink className="size-4" />
           </button>}
+          <button type="button" className="ui-icon-button size-8 text-brand-primary" onClick={() => void copyShareLink()} disabled={isSharing} title="로그인 없이 읽는 API 링크 복사">
+            {shareCopied ? <Check className="size-4" /> : <Link2 className="size-4" />}
+          </button>
           <button type="button" className="ui-icon-button size-8 text-destructive" onClick={() => setDeleteConfirmOpen(true)} title="삭제">
             <Trash2 className="size-4" />
           </button>
